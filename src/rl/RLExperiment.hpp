@@ -132,6 +132,8 @@ class RLExperiment
 
     std::stringstream           m_status;
 
+    // 0 = RL, 1 = Orbital, 2 = User
+    int                         m_controller = 1;
 
     // data keeping
     std::vector<size_t>         m_formationCompleteTimes;
@@ -221,11 +223,14 @@ public:
             std::cout << "Simulation Step: " << m_simulationSteps << "\n";
         }
 
+        m_controller = m_gui->getController();
         SensorReading reading;
 
         // control robots that have controllers
         for (auto robot : m_sim->getWorld()->getEntities("robot"))
         {
+            if (!robot.hasComponent<CSteer>()) { robot.addComponent<CSteer>(); }
+
             // record the robot sensor state into the batch
             SensorTools::ReadSensorArray(robot, m_sim->getWorld(), reading);
             m_states.push_back(m_config.hashFunction(reading));
@@ -233,15 +238,28 @@ public:
             // get the action that should be done for this entity
             EntityAction action;
 
-            // epsilon-greedy action selection
-            if ((rand() / (double)RAND_MAX) < m_config.epsilon)
+            switch (m_controller)
             {
-                action = getAction(rand() % 4);
-            }
-            else
-            {
-                action = getAction(m_QL.selectActionFromPolicy(m_config.hashFunction(reading)));
-                // action = EntityControllers::OrbitalConstruction(robot, m_sim->getWorld(), reading, m_config.occ);
+                case 1:
+                    // epsilon-greedy action selection
+                    if ((rand() / (double)RAND_MAX) < m_config.epsilon)
+                    {
+                        action = getAction(rand() % 4);
+                    }
+                    else
+                    {
+                        action = getAction(m_QL.selectActionFromPolicy(m_config.hashFunction(reading)));
+                    }
+                    break;
+                case 2:
+                    action = EntityControllers::OrbitalConstruction(robot, m_sim->getWorld(), reading, m_config.occ);
+                    break;
+                case 3:
+                    Vec2 vel = robot.getComponent<CTransform>().v;
+                    action = EntityAction(vel.length(), atan2(vel.y, vel.x));
+                    //robot.getComponent<CSteer>().angle = atan2(vel.y, vel.x);
+                    //robot.getComponent<CSteer>().speed = vel.length();
+                    break;
             }
 
             // record the action that the robot did into the batch

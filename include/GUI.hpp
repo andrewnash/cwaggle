@@ -27,6 +27,7 @@ class GUI
     bool                m_grid = false;
     bool                m_sensors = false;
     std::string         m_status = "";
+    int                 m_controller = 0;
 
     void init(std::shared_ptr<Simulator> sim)
     {
@@ -64,6 +65,9 @@ class GUI
                     case sf::Keyboard::D:      m_debug = !m_debug; break;
                     case sf::Keyboard::G:      m_grid = !m_grid; break;
                     case sf::Keyboard::S:      m_sensors = !m_sensors; break;
+                    case sf::Keyboard::Num1:   m_controller = 1; break;
+                    case sf::Keyboard::Num2:   m_controller = 2; break;
+                    case sf::Keyboard::Num3:   m_controller = 3; break;
                     default: break;
                 }
             }
@@ -121,6 +125,10 @@ class GUI
             {
                 if (event.mouseButton.button == sf::Mouse::Left)
                 {
+                    if (m_selected != Entity() && m_selected.hasComponent<CSteer>())
+                    {
+                        m_selected.getComponent<CSteer>().speed = 0;
+                    }
                     m_selected = Entity();
                     m_selectedLine = Entity();
                 }
@@ -150,6 +158,13 @@ class GUI
             Vec2 diff(m_mousePos.x - t.p.x, m_mousePos.y - t.p.y);
             diff /= 10;
             t.v = diff;
+
+
+            if (m_selected.hasComponent<CSteer>())
+            {
+                m_selected.getComponent<CSteer>().angle = atan2(diff.y, diff.x);
+                m_selected.getComponent<CSteer>().speed = diff.length();
+            }
         }
 
         if (m_selectedLine != Entity())
@@ -340,6 +355,10 @@ public:
         m_window.create(sf::VideoMode((size_t)m_sim->getWorld()->width(), (size_t)m_sim->getWorld()->height()), "CWaggle");
         m_window.setFramerateLimit(fps);
         init(sim);
+    }
+
+    int getController() {
+        return m_controller;
     }
 
     void setStatus(const std::string & str)

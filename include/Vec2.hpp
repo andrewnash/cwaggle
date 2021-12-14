@@ -76,6 +76,11 @@ public:
         return (x - rhs.x)*(x - rhs.x) + (y - rhs.y)*(y - rhs.y);
     }
 
+    inline double angle(const Vec2& rhs) const
+    {
+        return atan2(fabs(y - rhs.y), fabs(x - rhs.x));
+    }
+
     inline double length() const
     {
         return sqrt(x*x + y*y);
