@@ -25,7 +25,7 @@ public:
 
     QLearning() {}
 
-    QLearning(size_t numStates, size_t numActions, double alpha, double gamma, double initialQ) 
+    QLearning(size_t numStates, size_t numActions, double alpha, double gamma, double initialQ)
         : m_numStates   (numStates)
         , m_numActions  (numActions)
         , m_alpha       (alpha)
@@ -88,15 +88,25 @@ public:
         return maxVisits - m_N[s].begin();
     }
 
-    // Update the value estimate of Q[s][a] based on a given sample
+    // Update the value estimate of Q[s][a] using Q-Learning
     // Note: s and a must be integer hash of state and action
-    void updateValue(size_t s, size_t a, double r, size_t ns) 
+    void updateValueOffPolicy(size_t s, size_t a, double r, size_t ns)
     {
         ++m_updates;
         if (m_N[s][a] == 0) { m_visited++; }
         ++m_N[s][a];
         double maxNSQ = *std::max_element(m_Q[ns].begin(), m_Q[ns].end());
-        m_Q[s][a] += m_alpha * (r + m_gamma*maxNSQ - m_Q[s][a]);
+    	m_Q[s][a] += m_alpha * (r + m_gamma*maxNSQ - m_Q[s][a]);
+    }
+
+    // Update the value estimate of Q[s][a] using SARSA
+	// Note: s and a must be integer hash of state and action
+    void updateValueOnPolicy(size_t s, size_t a, double r, size_t ns, size_t na)
+    {
+        ++m_updates;
+        if (m_N[s][a] == 0) { m_visited++; }
+        ++m_N[s][a];
+        m_Q[s][a] += m_alpha * (r + m_gamma*m_Q[ns][na] - m_Q[s][a]);
     }
 
     void updatePolicy(size_t s) {

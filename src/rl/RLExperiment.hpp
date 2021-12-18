@@ -33,6 +33,7 @@ struct RLExperimentConfig
     size_t numActions   = 0;
     size_t batchSize    = 1;
     size_t qLearning    = 1;
+    size_t policy       = 1;
     double initialQ     = 0.0;
     double alpha        = 0.1;
     double gamma        = 0.9;
@@ -84,6 +85,7 @@ struct RLExperimentConfig
             else if (token == "alpha")          { fin >> alpha; }
             else if (token == "gamma")          { fin >> gamma; }
             else if (token == "epsilon")        { fin >> epsilon; }
+            else if (token == "policy")         { fin >> policy; }
             else if (token == "resetEval")      { fin >> resetEval; }
             else if (token == "writePlotSkip")  { fin >> writePlotSkip; }
             else if (token == "plotFilename")   { fin >> plotFile; }
@@ -117,11 +119,13 @@ class RLExperiment
     std::shared_ptr<GUI>        m_gui;
     std::shared_ptr<Simulator>  m_sim;
 
-    std::vector<Entity>         m_robotsActed;
+    // std::vector<Entity>         m_robotsActed;
     std::vector<size_t>         m_states;
     std::vector<size_t>         m_actions;
     std::vector<size_t>         m_nextStates;
+    std::vector<size_t>         m_nextActions;
     size_t                      m_stepsUntilRLUpdate = 1;
+    double                      m_return = 0;
 
     size_t                      m_simulationSteps = 0;
     double                      m_simulationTime = 0;
@@ -135,6 +139,7 @@ class RLExperiment
 
     // data keeping
     std::vector<size_t>         m_formationCompleteTimes;
+    std::vector<double>         m_returns;
 
     void resetSimulator()
     {
@@ -180,6 +185,18 @@ class RLExperiment
         return EntityAction(m_config.occ.forwardSpeed, m_config.actions[actionIndex]);
     }
 
+    double getReward()
+    {
+        double eval = Eval::PuckAvgThresholdDiff(m_sim->getWorld(), m_config.occ.thresholds[0], m_config.occ.thresholds[1]);
+        double reward = eval - m_previousEval;
+    	m_previousEval = eval;
+
+        if (reward <= 0) reward -= 1;
+        m_return += reward;
+
+        return reward;
+    }
+
 public:
 
     RLExperiment(const RLExperimentConfig & config)
@@ -212,6 +229,7 @@ public:
         if (m_config.saveQSkip && m_simulationSteps % m_config.saveQSkip == 0)
         {
             m_QL.save(m_config.saveQFile);
+            printResults();
         }
 
         ++m_simulationSteps;
@@ -231,22 +249,12 @@ public:
             m_states.push_back(m_config.hashFunction(reading));
 
             // get the action that should be done for this entity
-            EntityAction action;
-
-            // epsilon-greedy action selection
-            if ((rand() / (double)RAND_MAX) < m_config.epsilon)
-            {
-                action = getAction(rand() % 4);
-            }
-            else
-            {
-                action = getAction(m_QL.selectActionFromPolicy(m_config.hashFunction(reading)));
-                // action = EntityControllers::OrbitalConstruction(robot, m_sim->getWorld(), reading, m_config.occ);
-            }
+            EntityAction action = (rand() / (double)RAND_MAX) < m_config.epsilon ? getAction(rand() % 4) :
+        		getAction(m_QL.selectActionFromPolicy(m_config.hashFunction(reading)));
 
             // record the action that the robot did into the batch
             m_actions.push_back(getActionIndex(action));
-            m_robotsActed.push_back(robot);
+            // m_robotsActed.push_back(robot);
 
             // have the action apply its effects to the entity
             action.doAction(robot, m_config.simTimeStep);
@@ -261,7 +269,11 @@ public:
         {
             // record the robot sensor state into the batch
             SensorTools::ReadSensorArray(robot, m_sim->getWorld(), reading);
+            EntityAction action = (rand() / (double)RAND_MAX) < m_config.epsilon ? getAction(rand() % 4) :
+                getAction(m_QL.selectActionFromPolicy(m_config.hashFunction(reading)));
+
             m_nextStates.push_back(m_config.hashFunction(reading));
+            m_nextActions.push_back(getActionIndex(action));
         }
 
         if (m_states.size() != m_actions.size() || m_states.size() != m_nextStates.size())
@@ -269,32 +281,34 @@ public:
             std::cout << "Warning: Batch Size Mismatch: S " << m_states.size() << " A " << m_actions.size() << " NS " << m_nextStates.size() << "\n";
         }
 
-        // if the batch size has been reached, do the update
-        if (--m_stepsUntilRLUpdate == 0)
+        if (--m_stepsUntilRLUpdate == 0 || m_config.qLearning)
         {
-            // TODO: calculate the reward
-            double eval = Eval::PuckAvgThresholdDiff(m_sim->getWorld(), m_config.occ.thresholds[0], m_config.occ.thresholds[1]);
-            double reward = eval - m_previousEval;
+            double reward = getReward();
 
-            if (reward <= 0) reward -= 1;
-
-            if (m_config.qLearning)
+            if (m_config.qLearning && !m_config.policy)
             {
                 for (size_t i = 0; i < m_states.size(); i++)
                 {
-                    m_QL.updateValue(m_states[i], m_actions[i], reward, m_nextStates[i]);
+                    m_QL.updateValueOffPolicy(m_states[i], m_actions[i], reward, m_nextStates[i]);
+                    m_QL.updatePolicy(m_states[i]);
+                }
+            }
+            else if (m_config.qLearning && m_config.policy)
+            {
+                for (size_t i = 0; i < m_states.size(); i++)
+                {
+                    m_QL.updateValueOnPolicy(m_states[i], m_actions[i], reward, m_nextStates[i], m_nextActions[i]);
                     m_QL.updatePolicy(m_states[i]);
                 }
             }
 
-            m_previousEval = eval;
-            
             // clean up the data structures for next batch
             m_states.clear();
             m_actions.clear();
             m_nextStates.clear();
-            m_robotsActed.clear();
-            m_stepsUntilRLUpdate = m_config.batchSize;
+            m_nextActions.clear();
+            // m_robotsActed.clear();
+            m_stepsUntilRLUpdate = m_stepsUntilRLUpdate == 0 ? m_config.batchSize : m_stepsUntilRLUpdate;
         }
     }
 
