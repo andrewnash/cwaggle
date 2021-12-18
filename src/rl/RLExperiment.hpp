@@ -314,27 +314,46 @@ public:
 
     void printResults()
     {
-        // prints out the number of formations completed
+        std::string name = std::to_string(m_config.maxTimeSteps) + "_" +
+            std::to_string(m_config.numRobots) + "_" +
+            std::to_string(m_config.policy) + "_" +
+            std::to_string(m_config.epsilon) + "_" +
+            std::to_string(m_config.alpha) + ".txt";
+
+        // prints out the number of  completed
         std::stringstream ss;
-        ss << "gnuplot/results_form_" << m_config.numRobots << "_" << m_config.maxTimeSteps << ".txt";
-        std::cout << "Printing Results to: " << ss.str() << "\n";
+        ss << "results/returns_" + name;
+        std::cout << "\nPrinting Results to: " << ss.str();
 
         std::ofstream fout(ss.str());
-        fout << m_formations;
+        fout << m_simulationSteps << "\n";
+        fout << "0 0\n";
+        for (size_t i = 0; i < m_returns.size(); i++)
+        {
+            fout << m_returns[i] << " " << (i + 1) << "\n";
+        }
+
+        // prints out the number of formations completed
+        //std::stringstream ss;
+        //ss << "gnuplot/results_form_" << m_config.numRobots << "_" << m_config.maxTimeSteps << ".txt";
+        //std::cout << "Printing Results to: " << ss.str() << "\n";
+
+        //std::ofstream fout(ss.str());
+        //fout << m_formations;
 
         // prints out the number of  completed
         std::stringstream ss2;
-        ss2 << "gnuplot/results_form_over_time_" << m_config.numRobots << "_" << m_config.maxTimeSteps << ".txt";
-        std::cout << "Printing Results to: " << ss2.str() << "\n";
+        ss2 << "results/formations_" + name;
+        std::cout << "\nPrinting Results to: " << ss2.str();
 
 
         std::ofstream fout2(ss2.str());
+        fout2 << m_simulationSteps << "\n";
         fout2 << "0 0\n";
         for (size_t i = 0; i < m_formationCompleteTimes.size(); i++)
         {
             fout2 << m_formationCompleteTimes[i] << " " << (i+1) << "\n";  
         }
-
     }
 
     void run()
@@ -375,6 +394,8 @@ public:
             {
                 m_formations += 1;
                 m_formationCompleteTimes.push_back(m_simulationSteps);
+                m_returns.push_back(m_return);
+                m_return = 0;
                 resetSimulator();
             }
         }
@@ -388,9 +409,16 @@ namespace RLExperiments
     {
         RLExperimentConfig config;
         config.load("rl_config.txt");
+        
+        std::cout << "Running experiment with the following config:" << 
+            "\nnumRobots: "    << config.numRobots << 
+            "\nmaxTimeSteps: " << config.maxTimeSteps <<
+            "\npolicy: "       << config.policy <<
+            "\nepsilon: "      << config.epsilon <<
+            "\nalpha: "        << config.alpha;
 
         RLExperiment exp(config);
-        exp.run();
+    	exp.run();
         exp.printResults();
     }
 }
